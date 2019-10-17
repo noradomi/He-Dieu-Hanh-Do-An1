@@ -1,0 +1,13 @@
+hello.c
+hello.txt
+history.c
+history.c~
+history.h
+history.h~
+history.o
+Makefile
+new file
+simple_shell
+simple_shell.c
+simple_shell.c~
+simple_shell.o
