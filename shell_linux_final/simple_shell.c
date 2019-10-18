@@ -18,7 +18,7 @@ int IsRedirect = FALSE;//Đánh dấu để kiểm tra có phải
 int IsExit = FALSE;//Đánh dấu kiểm tra có thoát khỏi chương trình hay không
 int IsRead=FALSE;//Đánh dấu kiểm tra xem có phải đọc file hay không,nếu là FALSE tức là ở chế độ ghi file
 //int check=TRUE;
-//Variable to store the file to redirect to
+
 int IsThread=FALSE;//Kiếm tra xem lệnh có yêu cầu chạy background hay không
 char Path_File[1024];//Lưu tên file để đọc,ghi(nếu có)
 
@@ -196,7 +196,7 @@ int ParseUserCommand(char *input){
 	int len = 0;//Chiều dài 1 block của lệnh
 	
 	int n=0;//Số lượng thành phần co trong user command 
-	//Keep track of the last pipe
+	   
 	int LastFd;
 	
 
@@ -212,7 +212,7 @@ int ParseUserCommand(char *input){
 				if(*next =='|' || *next == '>' || *next== '<'){
 					printf("\n");
 					if(*next == '>'){  
-						IsRedirect = TRUE; //Có tên file
+						IsRedirect = TRUE; //Có thực thi redirect
 						++next;
 						
 						while(*next == ' ') next++;//Bỏ qua space
@@ -223,7 +223,7 @@ int ParseUserCommand(char *input){
 						IsRead=TRUE;
 						++next;
 						
-						while(*next == ' ') next++;//Bỏ qua space
+						while(*next == ' ') next++;//Có thực thi redirect
 						strcpy(Path_File, next);//Lưu tên file để chạy redirection
 					}
 
