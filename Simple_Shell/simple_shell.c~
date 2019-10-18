@@ -182,7 +182,7 @@ int ClearVariables(){
 	return 0;
 }
 
-//Tách các thành phần trong lệnh mà user nhập vào
+//Tách các thành phần trong lệnh mà user nhập vào và gọi lệnh thực thi sau khi tách
 int ParseUserCommand(char *input){
 
 	//Kiểm tra lệnh nhập vào là exit thì thoát chương trình
@@ -195,7 +195,7 @@ int ParseUserCommand(char *input){
 	
 	int len = 0;//Chiều dài 1 block của lệnh
 	
-	int n=0;//Số lượng thành phần co trong user command 
+	int n=0;//Số lượng thành phần có trong user command 
 	   
 	int LastFd;
 	
@@ -219,7 +219,7 @@ int ParseUserCommand(char *input){
 						strcpy(Path_File, next);//Lưu tên file để chạy redirection
 					}
 					if(*next == '<'){
-						IsRedirect = TRUE; //Có tên file
+						IsRedirect = TRUE; //Có thực thi redirect
 						IsRead=TRUE;
 						++next;
 						
@@ -277,30 +277,30 @@ int main(){
 		char *input = (char *) (malloc(MAX_LINE * sizeof(char)));
 		printf("osh> ");
        		 fflush(stdout);
-        	fgets(input, MAX_LINE, stdin);
+        	fgets(input, MAX_LINE, stdin);//Nhập vào lệnh
         	input[strlen(input) - 1] = '\0';
-		if(strcmp(input,"")!=0)
+		if(strcmp(input,"")!=0) //Nếu lệnh khác rỗng thì lưu vào history
 		{set_history(input);}
 		
-		if(strcmp(input,"!!")!=0)
+		if(strcmp(input,"!!")!=0)   //Nếu lệnh khác !! thì lưu lại để khi gọi !! sẽ thực thi câu lệnh trước đó
 		{
 			set(input);
 		
 		}
-		if(strcmp(input,"!!")==0)
+		if(strcmp(input,"!!")==0)  //Lấy lệnh trước đó thực thi lại khi gõ !!
 		{
 			if(get()!=NULL)
 				input=get();	
 			else
 				{
-				printf("No commands in history\n");
+				printf("No commands in history\n");   //Nếu không tồn tại lệnh trong history thì thông báo
 				continue;
 				}
 		
 			
 		}
 		
-		if(strchr(input,'&')!=NULL)
+		if(strchr(input,'&')!=NULL)  //Kiểm tra xem có chạy background hay không
 			{
 			char*input1=input;
 			IsThread=TRUE;
@@ -316,10 +316,10 @@ int main(){
 		}
 		
 		
-		ParseUserCommand(input);
+		ParseUserCommand(input);  // Gọi hàm phân tách các thành phần có trong command và thực thi
 		
 		
-		if(IsExit) 
+		if(IsExit)   
 		{
 		set(NULL);
 		break;
