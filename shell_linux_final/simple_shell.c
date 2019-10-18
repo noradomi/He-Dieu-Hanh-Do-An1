@@ -8,40 +8,33 @@
 #include "history.h"
 #define FALSE 0
 #define TRUE 1
-#define MAX_LINE 80
-//Variable to store the commands
-char *CMD[1024];
-//Flags
-int FIRST = TRUE;
-int LAST = FALSE, REDIRECT = FALSE, EXIT = FALSE,ISREAD=FALSE;
-int check=TRUE;
+#define MAX_LINE 80     //Chiều dài tối đa có của lệnh
+//Khai báo biến lưu trữ các thành phần trong câu lệnh, mỗi cmd[i] sẽ lưu trữ một thành phần của lệnh cách nhau bởi khoảng trắng(nếu có)
+char *Cmd[80];
+//Khai báo các biến đánh dấu
+int FirstCmd = TRUE; // Đánh dấu bắt đầu lệnh
+int LastCmd = FALSE;//Đánh dấu kết thúc lệnh
+int IsRedirect = FALSE;//Đánh dấu để kiểm tra có phải 
+int IsExit = FALSE;//Đánh dấu kiểm tra có thoát khỏi chương trình hay không
+int IsRead=FALSE;//Đánh dấu kiểm tra xem có phải đọc file hay không,nếu là FALSE tức là ở chế độ ghi file
+//int check=TRUE;
 //Variable to store the file to redirect to
-char PATH_FILE[1024];
-int isequal=FALSE;
-//Display prompt for use input
-/*char *prompt(){
-	char *cmd = NULL;
-	//size_t size;
-	printf("osh> ");
-	if (getline(&cmd, &size, stdin) != -1){
-		//remove newline
-		cmd[strcspn(cmd, "\n")] = 0;
-		return cmd;
-	}
-	perror("[*] Program terminating\n");
-	return NULL;
-}*/
-void cd_path(char *cmd[], int ele_cmd) {
+int IsThread=FALSE;//Kiếm tra xem lệnh có yêu cầu chạy background hay không
+char Path_File[1024];//Lưu tên file để đọc,ghi(nếu có)
+
+
+
+void CdPath(char *cmd[], int ele_cmd) {
     char *path = cmd[1];
     char *home = (char *) (malloc(MAX_LINE * sizeof(char)));
-    strcpy(home, getenv("HOME"));//tim kiem chuoi moi truong
+    strcpy(home, getenv("HOME"));//Tìm kiếm địa chỉ chuỗi môi trường rồi lưu vào biến home
     if (ele_cmd == 1) {
-        chdir(home); //Tra ve chuoi moi truong neu chieu dai chi co mot(~)
+        chdir(home); //Thay đổi địa chỉ đường dẫn hiện tại đến địa chỉ home
         return;
     }
     if (cmd[1][0] == '~') {
         if ((strlen(cmd[1]) == 1) || (strlen(cmd[1]) == 2 && cmd[1][1] == '/')) {
-            chdir(home);//tra den duong dan co dang (~link hoac /link)
+            chdir(home);//Thay đổi địa chỉ đường dẫn có dạng như (~link hoặc /link)
             return;
         }
         if (strlen(cmd[1]) > 2 && cmd[1][1] == '/') {
@@ -49,116 +42,107 @@ void cd_path(char *cmd[], int ele_cmd) {
         }
     }
     if (chdir(path) == -1) {
-        printf("%s : No such file or directory.\n", cmd[1]);
+        printf("%s : No such file or directory.\n", cmd[1]);//Trường hợp di chuyển đường dẫn không thành công thì thông báo ra
     }
     return;
 }
 
 
-//Executes the current command
-int execute(int in){
-	//Declare variables
-// int pid;
+//Hàm thực thi lệnh
+int Execute(int data){
+	
 	pid_t pid;
 	int fd[2];
 	int status = 1;
-
-	status = pipe(fd);
-	//Failed pipe case
-	if(status==-1){ perror("Pipe error\n"); return -1;}
 	
-	pid = fork();
+	status = pipe(fd);//Khởi tạo luồng
 	
-	//Failed fork case
+	if(status==-1)
+	{ perror("Load pipe error\n"); //Tạo luồng thất bại
+	return -1;
+	}
+	
+	pid = fork();//Tạo một process mới(process con)
+	
+	//Nếu trả về -1(thất bại)
 	if (pid==-1){ perror("Fork error\n"); return -1;}
 
-	//Child process executes the command
+	//Nếu trả về 0(thành công), thực thi process con
 	if (pid==0){
 
-		//Redirection case has file_fd as output pipe
-		if(REDIRECT && ISREAD==FALSE){
-			FILE *fp = fopen(PATH_FILE, "w");
+		//Chạy pipe có biến output file_fd đóng vai trò là kết quả output của pipe   
+		if(IsRedirect && IsRead==FALSE){
+			FILE *fp = fopen(Path_File, "w");
 			if(fp==NULL){
-				printf("Cannot open file %s\n", PATH_FILE);
+				printf("Cannot open file %s\n", Path_File);
 				return -1;
 			}
 			int file_fd = fileno(fp);
 
-			dup2(in, STDIN_FILENO);
+			dup2(data, STDIN_FILENO);
 			dup2(file_fd, STDOUT_FILENO);
 		}
-		else if(REDIRECT && ISREAD==TRUE)
-			{FILE *fp = fopen(PATH_FILE, "r");
+		else if(IsRedirect && IsRead==TRUE)
+			{FILE *fp = fopen(Path_File, "r");
 			if(fp==NULL){
-				printf("Cannot open file %s\n", PATH_FILE);
+				printf("Cannot open file %s\n", Path_File);
 				return -1;
 			}
 			int file_fd = fileno(fp);
 
-			dup2(in, STDOUT_FILENO);
+			dup2(data, STDOUT_FILENO);
 			dup2(file_fd, STDIN_FILENO);
 			
 			}
-		//If it's first command, there's no input pipe
-		else if(FIRST && !LAST){
+		//Nếu chỉ có một lệnh tức là không có input cho luồng kế tiếp,chỉ có output kết quả ra
+		else if(FirstCmd && !LastCmd){
 			
 			dup2(fd[1], STDOUT_FILENO);
 			
 		}
-		//If it's neither first nor last, it has input and output pipe
-		else if (!LAST && !FIRST){
-			dup2(in, STDIN_FILENO);
+		//Nếu có luồng ,tức là output của luồng đầu là input cho luồng sau
+		else if (!LastCmd && !FirstCmd){
+			dup2(data, STDIN_FILENO);
 			dup2(fd[1], STDOUT_FILENO);
 		}
-		//If it's the last, there's only input pipe
-		else if (!FIRST && LAST){
-			dup2(in, STDIN_FILENO);
+		//Trường hợp kết thúc luồng,chỉ có input luồng trước truyền vào truyền vào
+		else if (!FirstCmd && LastCmd){
+			dup2(data, STDIN_FILENO);
 		}
-		//Builtin cd command
-		if(strcmp(CMD[0], "cd") == 0){
-			//chdir(CMD[1]);
+		//Xây dựng cd command,cho phép thay đổi địa chỉ hiện tại
+		if(strcmp(Cmd[0], "cd") == 0){
 			int len_cmd=0;
-			while(CMD[len_cmd]!=NULL)
+			while(Cmd[len_cmd]!=NULL)
 			{
 				len_cmd++;
 			}
-			cd_path(CMD,len_cmd);
+			CdPath(Cmd,len_cmd);
 		}
-		else if(strcmp(CMD[0],"history")==0)
+		else if(strcmp(Cmd[0],"history")==0)     // Gõ lệnh history để xem lịch sử các lệnh
 		{
 			get_history();
 			exit(1);
 		}
-		else if(execvp(CMD[0], CMD) == -1){
-			printf("Command \"%s\" cannot be executed ", CMD[0]);
+		else if(execvp(Cmd[0], Cmd) == -1)  //Nếu thực thi lệnh thất bại,thì thông báo cho user
+		{    
+			printf("Command \"%s\" cannot be executed ", Cmd[0]);   
 			exit(1);
 		}
 		
 		close(fd[0]);
 	}
-	//Parent
-	else if(!isequal){
-		//Wait for children to finish executing
+	//Chạy luồng cha
+	else if(!IsThread){
+		//Chờ luồng con kết thúc
 		//int status1;
 		waitpid(pid, NULL,0);
-		
 		//wait(&status);
-		
 		//printf("%d",pid);
-		
-
-		/*pid_t pid=fork();
-		if(isequal){
-		//printf("Cho");
-		waitpid(pid, NULL, 0);
-		exit(1);
-		}*/
-		if(REDIRECT){
+		if(IsRedirect){
 			close(fd[1]);
 			return 0;
 		}
-
-		if(LAST){
+       if(LastCmd){
 			FILE *input = fdopen(fd[0], "r");
 			char buf[1024];
 			//close(in);
@@ -176,144 +160,120 @@ int execute(int in){
 	
 	}
 	
-	//printf("FD 0 LA %d",fd[0]);
+	
 	
 	return fd[0];
 }
 
-//Reset all global variables
-int reset(){
-	//Rest first and last flag
+//Hàm reset lại các global variables trở lại giá trị mặc định ban đầu
+int ClearVariables(){
 	int i;
-	LAST = FALSE;
-	FIRST = TRUE;
-	//Clear the CMD
-	for(i=0; i<1024; i++) CMD[i] = '\0';
-	//Delete the PATH_FILE
-	PATH_FILE[0] = '\0';
-	REDIRECT = FALSE;//reset flag redirect
-	ISREAD=FALSE;//reset flag read
-	isequal=FALSE;
+	LastCmd = FALSE;
+	FirstCmd = TRUE;
+	//Clear các lệnh cmd
+	for(i=0; i<80; i++) 
+		Cmd[i] = '\0';
+	//Xóa Path_File
+	Path_File[0] = '\0';
+	IsRedirect = FALSE;
+	IsRead=FALSE;//Reset đánh dấu đọc file
+	IsThread=FALSE;//Reset kiểm tra luồng
 
 	return 0;
 }
 
-//Parse user input to an array of commands
-int Parse(char *input){
-	
+//Tách các thành phần trong lệnh mà user nhập vào
+int ParseUserCommand(char *input){
 
-	
-	//Check if it's our shell's built-in command to exit
-	if(strcmp(input, "exit") == 0 || strcmp(input, "quit") == 0){
-		EXIT = TRUE;
-		//set(NULL);
+	//Kiểm tra lệnh nhập vào là exit thì thoát chương trình
+	if(strcmp(input, "exit") == 0){
+		IsExit = TRUE;
 		exit(0);
 	}
-	
-	//Declare variables
 	char *next = input;
-	int IN_QUOTES = FALSE;
-	//Length of one block in a command
-	int len = 0;
-	//Number of arguments in a command
-	int n=0;
+	
+	
+	int len = 0;//Chiều dài 1 block của lệnh
+	
+	int n=0;//Số lượng thành phần co trong user command 
 	//Keep track of the last pipe
-	int last_cmd_fd;
+	int LastFd;
 	
 
-	//Parse the commands and call execute()
+	//Phân tích command và gọi hàm Execute()
 	while(*next){
-		//Skip beginning white spaces
+		//Bỏ qua các kí tự space
 		while(*next == ' ') 
 		{next++;}
 		input = next;
-		//Read in the next chunk
-		while(IN_QUOTES || (*next != ' ' && *next != '\0')){
-			//Case quotes
-			if(*next == '\"' || *next == '\''){
-				//Two cuts work here
-				//if(!IN_QUOTES) *next = ' ';
-				//len--;
-				IN_QUOTES = !IN_QUOTES;
-				//Original code
-				if(!IN_QUOTES) input++;
-				len--;
-			}
-			//Case not in quotes
-			if(!IN_QUOTES) {
-				//Execute the current command and go to next command
+		
+		while((*next != ' ' && *next != '\0')){
+			//Tìm kiếm các thành phần trong lệnh
 				if(*next =='|' || *next == '>' || *next== '<'){
 					printf("\n");
-					if(*next == '>'){
-						REDIRECT = TRUE;
+					if(*next == '>'){  
+						IsRedirect = TRUE; //Có tên file
 						++next;
-						//Skip all whitespaces
-						while(*next == ' ') next++;
-						strcpy(PATH_FILE, next);
+						
+						while(*next == ' ') next++;//Bỏ qua space
+						strcpy(Path_File, next);//Lưu tên file để chạy redirection
 					}
 					if(*next == '<'){
-						REDIRECT = TRUE;
-						ISREAD=TRUE;
+						IsRedirect = TRUE; //Có tên file
+						IsRead=TRUE;
 						++next;
-						//Skip all whitespaces
-						while(*next == ' ') next++;
-						strcpy(PATH_FILE, next);
+						
+						while(*next == ' ') next++;//Bỏ qua space
+						strcpy(Path_File, next);//Lưu tên file để chạy redirection
 					}
 
-					//Gets the fd of the last command executed
-					last_cmd_fd = execute(last_cmd_fd);
+					
+					LastFd= Execute(LastFd);//Lấy file decriptor của command cuối
 
-					//Set FIRST to FALSE after first command
-					if(FIRST) FIRST = FALSE;
+					
+					if(FirstCmd) 
+					FirstCmd = FALSE;//Gán FirstCmd thành FALSE sau khi thực thi xong lệnh đầu
 
-					memset(CMD, 0, sizeof(CMD));
+					memset(Cmd, 0, sizeof(Cmd));
 					n = 0;
 					break;
-				}
+				
 			}
-			//printf("%s",next);
+			
 			len++; next++;
 		}
-		//Copy the commands out and print it
+	
 		if(len!=0){
-			//Set the arguments in the global variable
-			CMD[n] = (char *)malloc(len+1);
-			strncpy(CMD[n], input, len);
-			CMD[n][len] = '\0';
-			//Advance to the next argument
+			//Khởi gán gán từng phần tử trong user command vào cmd[i]
+			Cmd[n] = (char *)malloc(len+1);
+			strncpy(Cmd[n], input, len);
+			Cmd[n][len] = '\0';
+			
 			n++;
 		}
-		//Proceed to the next chunk
+		
 		input = ++next;
 		len = 0;
 	}
 
-	//Execute last command
-	LAST = TRUE;
-	//Don't need to execute if it's redirection
-	if(!REDIRECT){
-		last_cmd_fd = execute(last_cmd_fd);
+	//Thực thi last command
+	LastCmd = TRUE;
+	//Nếu không yêu cầu redirection thì thực thi các lệnh mà không cần PathFile
+	if(!IsRedirect){
+		LastFd = Execute(LastFd);
 	}
 	
-	/* if (strcmp(CMD[n-1], "&") == 0)
-        {
-            isequal =TRUE; 
-            CMD[n- 1] = NULL;
-            n--;
-        }*/
-	//Reset all global variables
 	
-	reset();
+	
+	ClearVariables();//Reset lại các biến môi trường
 	
 	return 0;
 }
-//Runs the shell
+
 int main(){
-	//char *input[MAX_LINE / 2 + 1];
-    	int should_run = 1;
+	
+    int should_run = 1;
 	while(should_run){
-		
-		
 		char *input = (char *) (malloc(MAX_LINE * sizeof(char)));
 		printf("osh> ");
        		 fflush(stdout);
@@ -325,7 +285,7 @@ int main(){
 		if(strcmp(input,"!!")!=0)
 		{
 			set(input);
-			//printf("%s da set",get());
+		
 		}
 		if(strcmp(input,"!!")==0)
 		{
@@ -336,34 +296,30 @@ int main(){
 				printf("No commands in history\n");
 				continue;
 				}
-			//printf("%s",input);
+		
 			
 		}
-		//Check if received a command
-		if(input==NULL){
-			perror("[*] No command specified, exiting...\n");
-			exit(1);
-		}
+		
 		if(strchr(input,'&')!=NULL)
 			{
 			char*input1=input;
-			isequal=TRUE;
+			IsThread=TRUE;
 			int length=0;
 			while(*input1!='\0')
 				{length++;
 				input1++;}
-			//printf("%d",length);
+			
 			char *temp=(char*)malloc(length);
 			strncpy(temp,input,length-1);
 			temp[length-1]='\0';
 			input=temp;
 		}
-		//printf("%d %s",isequal,input);
-		
-		Parse(input);
 		
 		
-		if(EXIT) 
+		ParseUserCommand(input);
+		
+		
+		if(IsExit) 
 		{
 		set(NULL);
 		break;
@@ -374,3 +330,4 @@ int main(){
 	exit(0);
 	return 0;
 }
+
